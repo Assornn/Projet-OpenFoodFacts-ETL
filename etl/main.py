@@ -1,166 +1,234 @@
-"""
-ETL OpenFoodFacts - Orchestrateur Principal
-Version corrigée pour Windows (Spark + Hadoop winutils)
-"""
-
-import os
-import sys
-
-# ======================================================
-# FIX SPARK / HADOOP SOUS WINDOWS
-# ======================================================
-HADOOP_HOME = "C:/hadoop"
-SPARK_WAREHOUSE = "file:/C:/tmp/spark-warehouse"
-
-os.environ["HADOOP_HOME"] = HADOOP_HOME
-os.environ["hadoop.home.dir"] = HADOOP_HOME
-os.environ["spark.sql.warehouse.dir"] = SPARK_WAREHOUSE
-
-os.makedirs("C:/hadoop/bin", exist_ok=True)
-os.makedirs("C:/tmp/spark-warehouse", exist_ok=True)
-
-# Python utilisé par Spark
-os.environ["PYSPARK_PYTHON"] = sys.executable
-os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
-# ======================================================
-
-from pyspark.sql import SparkSession
-import yaml
+import argparse
 import json
 import logging
+import os
 from datetime import datetime
-from pathlib import Path
 
-from bronze import BronzeExtractor
-from silver import SilverTransformer
-from gold import GoldLoader
+import yaml
+from pyspark.sql import SparkSession
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType
+)
+from pyspark.sql.functions import col, trim, lower, to_timestamp
+
+from etl.gold import GoldLoader
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("etl")
 
 
-class OpenFoodFactsETL:
-    """Orchestrateur ETL"""
+# ============================================================
+# CONFIG
+# ============================================================
 
-    def __init__(self, config_path="config.yaml"):
-        self._setup_logging()
-        self.config = self._load_config(config_path)
-        self.spark = self._create_spark_session()
-        self.metrics = {
-            "run_timestamp": datetime.now().isoformat(),
-            "status": "started"
-        }
+def load_config(path: str) -> dict:
+    logger.info("Chargement config depuis: %s", path)
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
-    # --------------------------------------------------
-    # LOGGING
-    # --------------------------------------------------
-    def _setup_logging(self):
-        Path("logs").mkdir(exist_ok=True)
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler("logs/etl.log", encoding="utf-8"),
-                logging.StreamHandler()
-            ]
+
+# ============================================================
+# SPARK SESSION (FIX JDBC WINDOWS)
+# ============================================================
+
+def build_spark(cfg: dict) -> SparkSession:
+    spark_cfg = cfg.get("spark", {})
+
+    app_name = spark_cfg.get("app_name", "OpenFoodFacts ETL")
+    master = spark_cfg.get("master", "local[*]")
+    driver_memory = spark_cfg.get("driver_memory", "4g")
+    executor_memory = spark_cfg.get("executor_memory", "4g")
+
+    mysql_jar = spark_cfg.get("jars")  # file:///C:/spark/jars/mysql-connector-xxx.jar
+
+    if not mysql_jar:
+        raise ValueError("spark.jars manquant dans la configuration")
+
+    # Spark a besoin du chemin LOCAL pour le classpath JVM
+    mysql_jar_local = mysql_jar.replace("file:///", "")
+
+    logger.info("MySQL JAR utilisé: %s", mysql_jar)
+
+    spark = (
+        SparkSession.builder
+        .appName(app_name)
+        .master(master)
+        .config("spark.sql.session.timeZone", "Europe/Paris")
+        .config("spark.driver.memory", driver_memory)
+        .config("spark.executor.memory", executor_memory)
+
+        # 🔥 FIX CRITIQUE JDBC WINDOWS
+        .config("spark.jars", mysql_jar)
+        .config("spark.driver.extraClassPath", mysql_jar_local)
+        .config("spark.executor.extraClassPath", mysql_jar_local)
+
+        .getOrCreate()
+    )
+
+    return spark
+
+
+# ============================================================
+# PIPELINE
+# ============================================================
+
+def run_pipeline(cfg: dict):
+    spark = build_spark(cfg)
+
+    start = datetime.now()
+    status = "success"
+    metrics = {}
+
+    try:
+        logger.info("\n============================================================")
+        logger.info("DEMARRAGE ETL OPENFOODFACTS")
+        logger.info("============================================================\n")
+
+        # ====================================================
+        # BRONZE
+        # ====================================================
+        logger.info(">>> PHASE BRONZE")
+        logger.info("=== PHASE BRONZE: Extraction CSV ===")
+
+        off = cfg.get("openfoodfacts", {})
+        raw_path = off.get("raw_data_path")
+        delimiter = off.get("delimiter", "\t")
+        header = bool(off.get("header", True))
+
+        logger.info("Source: %s", raw_path)
+
+        schema = StructType([
+            StructField("code", StringType(), True),
+            StructField("product_name", StringType(), True),
+            StructField("brands", StringType(), True),
+            StructField("categories", StringType(), True),
+            StructField("countries", StringType(), True),
+            StructField("energy-kcal_100g", StringType(), True),
+            StructField("fat_100g", StringType(), True),
+            StructField("sugars_100g", StringType(), True),
+            StructField("proteins_100g", StringType(), True),
+            StructField("salt_100g", StringType(), True),
+            StructField("nutriscore_grade", StringType(), True),
+            StructField("last_modified_t", StringType(), True),
+        ])
+
+        df_bronze = (
+            spark.read
+            .format("csv")
+            .option("header", str(header).lower())
+            .option("sep", delimiter)
+            .option("mode", "PERMISSIVE")
+            .schema(schema)
+            .load(raw_path)
         )
-        self.logger = logging.getLogger(__name__)
 
-    # --------------------------------------------------
-    # CONFIG
-    # --------------------------------------------------
-    def _load_config(self, config_path):
-        local = Path("config.local.yaml")
-        if local.exists():
-            config_path = "config.local.yaml"
-        self.logger.info(f"Chargement config depuis: {config_path}")
+        count_bronze = df_bronze.count()
+        logger.info("✓ %d produits extraits", count_bronze)
+        logger.info("Colonnes lues: %d", len(df_bronze.columns))
 
-        with open(config_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+        # ====================================================
+        # SILVER
+        # ====================================================
+        logger.info("\n>>> PHASE SILVER")
+        logger.info("============================================================")
+        logger.info("=== DEMARRAGE PHASE SILVER ===")
+        logger.info("============================================================")
+        logger.info("=== PHASE SILVER: Nettoyage et normalisation ===")
 
-    # --------------------------------------------------
-    # SPARK
-    # --------------------------------------------------
-    def _create_spark_session(self):
-        builder = (
-            SparkSession.builder
-            .appName(self.config["spark"]["app_name"])
-            .master(self.config["spark"]["master"])
-            .config("spark.driver.memory", self.config["spark"]["driver_memory"])
-            .config("spark.ui.showConsoleProgress", "false")
+        df_silver = (
+            df_bronze
+            .select(
+                trim(col("code")).alias("code"),
+                trim(col("product_name")).alias("product_name"),
+                trim(col("brands")).alias("brands"),
+                trim(col("categories")).alias("categories"),
+                trim(col("countries")).alias("countries"),
+                to_timestamp(col("last_modified_t")).alias("last_modified_ts"),
+                col("energy-kcal_100g").cast(DoubleType()).alias("energy_kcal_100g"),
+                col("fat_100g").cast(DoubleType()).alias("fat_100g"),
+                col("sugars_100g").cast(DoubleType()).alias("sugars_100g"),
+                col("proteins_100g").cast(DoubleType()).alias("proteins_100g"),
+                col("salt_100g").cast(DoubleType()).alias("salt_100g"),
+                lower(trim(col("nutriscore_grade"))).alias("nutriscore_grade"),
+            )
         )
 
-        mysql_jar = self.config["spark"].get("mysql_jar", "")
-        if mysql_jar and Path(mysql_jar).exists():
-            jar_path = f"file:///{mysql_jar}" if not mysql_jar.startswith("file:") else mysql_jar
-            builder = builder.config("spark.jars", jar_path)
-            print(f"MySQL JAR chargé: {mysql_jar}")
-        else:
-            print("MySQL JAR non chargé")
+        logger.info("OK Nettoyage et normalisation effectues")
 
-        spark = builder.getOrCreate()
-        spark.sparkContext.setLogLevel("WARN")
-        return spark
+        logger.info("Filtrage des enregistrements invalides...")
+        df_silver = df_silver.filter(
+            col("code").isNotNull()
+            & col("code").rlike("^[0-9]+$")
+        )
 
-    # --------------------------------------------------
-    # RUN
-    # --------------------------------------------------
-    def run(self):
-        self.logger.info("\n" + "=" * 60)
-        self.logger.info("DEMARRAGE ETL OPENFOODFACTS")
-        self.logger.info("=" * 60)
+        count_silver = df_silver.count()
+        logger.info("OK Filtrage: %d produits conserves", count_silver)
 
-        start = datetime.now()
+        metrics["bronze_count"] = count_bronze
+        metrics["silver_count"] = count_silver
+
+        logger.info("============================================================")
+        logger.info("=== PHASE SILVER TERMINEE ===")
+        logger.info("Produits finaux: %d", count_silver)
+        logger.info("============================================================")
+
+        # ====================================================
+        # GOLD
+        # ====================================================
+        logger.info("\n>>> PHASE GOLD")
+        loader = GoldLoader(spark, cfg)
+        loader.load(df_silver)
+
+    except Exception as e:
+        status = "failed"
+        logger.exception("ERREUR ETL")
+        raise e
+
+    finally:
+        duration = (datetime.now() - start).total_seconds()
+        metrics["duration_s"] = duration
+        metrics["status"] = status
+
+        os.makedirs("output/metrics", exist_ok=True)
+        out = f"output/metrics/run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(out, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2, ensure_ascii=False)
+
+        logger.info("\n============================================================")
+        logger.info("Duree: %.2fs", duration)
+        logger.info("Statut: %s", status)
+        logger.info("Metriques: %s", out)
+        logger.info("============================================================")
 
         try:
-            # -------- BRONZE --------
-            self.logger.info("\n>>> PHASE BRONZE")
-            extractor = BronzeExtractor(self.spark, self.config)
-            df_bronze = extractor.extract()
-            self.metrics["bronze"] = extractor.get_metrics()
+            spark.stop()
+        except Exception:
+            pass
 
-            # -------- SILVER --------
-            self.logger.info("\n>>> PHASE SILVER")
-            transformer = SilverTransformer(self.spark, self.config)
-            df_silver = transformer.transform(df_bronze)
-            self.metrics["silver"] = transformer.get_metrics()
 
-            # -------- GOLD --------
-            self.logger.info("\n>>> PHASE GOLD")
-            loader = GoldLoader(self.spark, self.config)
-            loader.load(df_silver)
-            self.metrics["gold"] = loader.get_metrics()
+# ============================================================
+# MAIN
+# ============================================================
 
-            self.metrics["status"] = "success"
-            self.logger.info("ETL TERMINE AVEC SUCCES")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config",
+        required=True,
+        help="Chemin du fichier YAML de configuration"
+    )
+    args = parser.parse_args()
 
-        except Exception as e:
-            self.logger.error(f"ERREUR ETL: {e}")
-            self.metrics["status"] = "failed"
-            self.metrics["error"] = str(e)
-            import traceback
-            traceback.print_exc()
-
-        finally:
-            duration = (datetime.now() - start).total_seconds()
-            self.metrics["duration_seconds"] = duration
-
-            output_dir = Path("output/metrics")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            metrics_file = output_dir / f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-
-            with open(metrics_file, "w", encoding="utf-8") as f:
-                json.dump(self.metrics, f, indent=2, ensure_ascii=False)
-
-            self.logger.info("\n" + "=" * 60)
-            self.logger.info(f"Duree: {duration:.2f}s")
-            self.logger.info(f"Statut: {self.metrics['status']}")
-            self.logger.info(f"Metriques: {metrics_file}")
-            self.logger.info("=" * 60)
-
-            try:
-                self.spark.stop()
-            except Exception:
-                pass
+    cfg = load_config(args.config)
+    run_pipeline(cfg)
 
 
 if __name__ == "__main__":
-    etl = OpenFoodFactsETL()
-    etl.run()
+    main()
