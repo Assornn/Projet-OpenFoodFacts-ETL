@@ -1,0 +1,17 @@
+{
+  "code": "3017620422003",
+  "product_name_fr": "Nutella",
+  "product_name": "Nutella",
+  "brands": "Ferrero",
+  "categories": "Pâtes à tartiner",
+  "countries": "France",
+  "nutriscore_grade": "e",
+  "nova_group": 4,
+  "nutriments": {
+    "energy-kcal_100g": "539",
+    "fat_100g": "30.9",
+    "sugars_100g": "56.3",
+    "salt_100g": "0.107",
+    "proteins_100g": "6.3"
+  }
+}

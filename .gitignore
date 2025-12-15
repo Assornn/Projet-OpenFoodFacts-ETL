@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Data files
+data/raw/*.jsonl
+data/raw/*.csv
+data/raw/*.gz
+data/processed/
+data/quarantine/
+
+# Output
+output/metrics/*.json
+output/reports/*.md
+logs/*.log
+
+# Config sensitive
+.env
+config.local.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+.pytest_cache/
+.coverage

@@ -1,0 +1,44 @@
+# Configuration OpenFoodFacts ETL
+
+spark:
+  app_name: "OpenFoodFacts ETL"
+  master: "local[*]"
+  driver_memory: "4g"
+  executor_memory: "4g"
+  mysql_jar: "/path/to/mysql-connector-java-8.0.33.jar"
+
+mysql:
+  host: "localhost"
+  port: 3306
+  database: "openfoodfacts"
+  user: "root"
+  password: "password"
+  jdbc_url: "jdbc:mysql://localhost:3306/openfoodfacts"
+
+openfoodfacts:
+  source_url: "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz"
+  raw_data_path: "data/raw/openfoodfacts-sample.jsonl"
+  format: "json"
+
+quality:
+  completeness:
+    product_name: 0.95
+    nutrients_key: 0.70
+  
+  rules:
+    bounds:
+      sugars_100g: [0, 100]
+      salt_100g: [0, 25]
+      fat_100g: [0, 100]
+      proteins_100g: [0, 100]
+      energy_kcal_100g: [0, 900]
+
+pipeline:
+  phases:
+    - bronze
+    - silver
+    - gold
+  
+  execution:
+    mode: "batch"
+    checkpoint_enabled: true
