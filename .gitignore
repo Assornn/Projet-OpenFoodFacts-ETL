@@ -33,3 +33,6 @@ Thumbs.db
 # Test
 .pytest_cache/
 .coverage
+
+# MySQL Connector JAR
+*.jar

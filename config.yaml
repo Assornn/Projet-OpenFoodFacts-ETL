@@ -5,14 +5,14 @@ spark:
   master: "local[*]"
   driver_memory: "4g"
   executor_memory: "4g"
-  mysql_jar: "/path/to/mysql-connector-java-8.0.33.jar"
+  mysql_jar: "/path/to/mysql-connector-java-8.0.33.jar"  # ⬅️ Chemin générique
 
 mysql:
   host: "localhost"
   port: 3306
   database: "openfoodfacts"
   user: "root"
-  password: "password"
+  password: "password"  # ⬅️ Mot de passe générique
   jdbc_url: "jdbc:mysql://localhost:3306/openfoodfacts"
 
 openfoodfacts:
