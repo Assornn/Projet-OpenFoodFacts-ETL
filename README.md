@@ -80,3 +80,50 @@ pytest tests/ -v
 ## 📝 Licence
 
 Projet pédagogique - M1 EISI/CDPIA/CYBER 2025-2026
+
+
+## 📥 Téléchargement des Données
+
+Le projet utilise le **CSV officiel OpenFoodFacts** :
+- URL: https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz
+- Taille: ~1.5 GB compressé, ~8 GB décompressé
+- Contenu: ~2,8M produits du monde entier
+
+### Téléchargement automatique
+
+**Linux/Mac:**
+```bash
+chmod +x scripts/download_data.sh
+./scripts/download_data.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\download_data.ps1
+```
+
+### Téléchargement manuel
+
+1. Télécharger: https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz
+2. Placer dans `data/raw/`
+3. Décompresser: `gunzip en.openfoodfacts.org.products.csv.gz`
+
+## 🚀 Exécution
+
+```bash
+# 1. Télécharger les données
+./scripts/download_data.sh
+
+# 2. Lancer l'ETL
+python etl/main.py
+```
+
+## 📊 Format des Données
+
+Le CSV OpenFoodFacts contient 180+ colonnes avec:
+- Codes-barres (code)
+- Noms produits (product_name, product_name_fr, product_name_en)
+- Marques (brands)
+- Catégories (categories)
+- Nutriments (*_100g)
+- Scores (nutriscore_grade, nova_group, ecoscore_grade)

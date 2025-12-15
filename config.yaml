@@ -1,24 +1,28 @@
-# Configuration OpenFoodFacts ETL
+# Configuration OpenFoodFacts ETL - CSV Officiel
 
 spark:
   app_name: "OpenFoodFacts ETL"
   master: "local[*]"
   driver_memory: "4g"
   executor_memory: "4g"
-  mysql_jar: "/path/to/mysql-connector-java-8.0.33.jar"  # ⬅️ Chemin générique
+  mysql_jar: "/path/to/mysql-connector-java-8.0.33.jar"
 
 mysql:
   host: "localhost"
   port: 3306
   database: "openfoodfacts"
   user: "root"
-  password: "password"  # ⬅️ Mot de passe générique
+  password: "password"
   jdbc_url: "jdbc:mysql://localhost:3306/openfoodfacts"
 
 openfoodfacts:
-  source_url: "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz"
-  raw_data_path: "data/raw/openfoodfacts-sample.jsonl"
-  format: "json"
+  # URL officielle du CSV OpenFoodFacts
+  source_url: "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz"
+  
+  # Chemin local après téléchargement
+  raw_data_path: "data/raw/en.openfoodfacts.org.products.csv"
+  
+  format: "csv"
 
 quality:
   completeness:
