@@ -2,6 +2,8 @@
 ETL OpenFoodFacts - Orchestrateur Principal
 """
 
+import os
+import sys
 from pyspark.sql import SparkSession
 import yaml
 import json
@@ -18,6 +20,10 @@ class OpenFoodFactsETL:
     """Orchestrateur ETL"""
     
     def __init__(self, config_path='config.yaml'):
+        # Configurer l'environnement pour Windows
+        os.environ['PYSPARK_PYTHON'] = sys.executable
+        os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
+        
         self._setup_logging()
         self.config = self._load_config(config_path)
         self.spark = self._create_spark_session()
@@ -27,21 +33,22 @@ class OpenFoodFactsETL:
         }
     
     def _setup_logging(self):
-        # Créer le dossier logs si nécessaire
+        """Configure le système de logging"""
         Path('logs').mkdir(exist_ok=True)
         
+        # Désactiver les emojis pour éviter les erreurs Unicode
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler('logs/etl.log'),
+                logging.FileHandler('logs/etl.log', encoding='utf-8'),
                 logging.StreamHandler()
             ]
         )
         self.logger = logging.getLogger(__name__)
     
     def _load_config(self, config_path):
-        # Priorité config.local.yaml
+        """Charge la configuration"""
         local = Path('config.local.yaml')
         if local.exists():
             config_path = 'config.local.yaml'
@@ -51,15 +58,16 @@ class OpenFoodFactsETL:
             return yaml.safe_load(f)
     
     def _create_spark_session(self):
+        """Crée la session Spark"""
         builder = SparkSession.builder \
             .appName(self.config['spark']['app_name']) \
             .master(self.config['spark']['master']) \
-            .config("spark.driver.memory", self.config['spark']['driver_memory'])
+            .config("spark.driver.memory", self.config['spark']['driver_memory']) \
+            .config("spark.ui.showConsoleProgress", "false")
         
         # Gestion du JAR MySQL (optionnel)
         mysql_jar = self.config['spark'].get('mysql_jar', '')
         if mysql_jar and mysql_jar.strip() and Path(mysql_jar).exists():
-            # Utiliser file:/// pour Windows
             jar_path = f"file:///{mysql_jar}" if not mysql_jar.startswith('file:') else mysql_jar
             builder = builder.config("spark.jars", jar_path)
             print(f"MySQL JAR charge: {mysql_jar}")
@@ -107,7 +115,6 @@ class OpenFoodFactsETL:
             self.metrics['error'] = str(e)
             import traceback
             traceback.print_exc()
-            raise
         
         finally:
             duration = (datetime.now() - start).total_seconds()
@@ -121,6 +128,7 @@ class OpenFoodFactsETL:
             with open(metrics_file, 'w', encoding='utf-8') as f:
                 json.dump(self.metrics, f, indent=2, ensure_ascii=False)
             
+            # Afficher résumé
             self.logger.info("\n" + "="*60)
             self.logger.info(f"Duree: {duration:.2f}s")
             self.logger.info(f"Statut: {self.metrics['status']}")
@@ -128,10 +136,27 @@ class OpenFoodFactsETL:
                 self.logger.info(f"Produits extraits: {self.metrics['bronze']['products_read']}")
             if 'silver' in self.metrics:
                 self.logger.info(f"Produits traites: {self.metrics['silver']['products_filtered']}")
+                if 'completeness_pct' in self.metrics['silver']:
+                    self.logger.info(f"Completude moyenne: {self.metrics['silver']['completeness_pct']:.2f}%")
+                if 'anomalies' in self.metrics['silver']:
+                    self.logger.info(f"Anomalies: {self.metrics['silver']['anomalies']['total_products_with_anomalies']} produits")
             self.logger.info(f"Metriques: {metrics_file}")
             self.logger.info("="*60)
             
-            self.spark.stop()
+            # Arrêter Spark proprement
+            try:
+                # Arrêter le SparkContext d'abord
+                if hasattr(self, 'spark') and self.spark is not None:
+                    self.spark.sparkContext.stop()
+                    self.spark.stop()
+                    self.logger.info("Session Spark arretee")
+            except Exception as e:
+                # Ignorer les erreurs de cleanup
+                pass
+            
+            # Forcer le nettoyage de la mémoire (Windows)
+            import gc
+            gc.collect()
 
 
 if __name__ == "__main__":
