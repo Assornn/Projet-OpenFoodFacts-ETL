@@ -28,7 +28,7 @@ graph LR
     C -->|Spark Gold| E(Chargement MySQL)
     E -->|SQL| F[(DataMart MySQL)]
     F -->|Connector| G[Dashboard Streamlit]
-
+```
 🛠️ Stack Technologique
 ETL Engine : Apache Spark 3.5 (PySpark)
 
