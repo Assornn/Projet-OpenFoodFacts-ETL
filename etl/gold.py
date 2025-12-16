@@ -10,7 +10,6 @@ class GoldLoader:
     def load(self, df):
         """
         Charge les données agrégées/nettoyées dans MySQL (DataMart).
-        Convertit automatiquement les tableaux (Array) en chaînes (String).
         """
         print("[GOLD] Verification / creation schema")
         
@@ -25,27 +24,30 @@ class GoldLoader:
         except Exception:
             return
 
-        # --- CORRECTION ROBUSTE : Conversion automatique de TOUS les Arrays ---
-        # On parcourt le schéma pour trouver toutes les colonnes de type ArrayType
+        # 1. Conversion des Arrays en String
         array_cols = [f.name for f in df.schema.fields if isinstance(f.dataType, ArrayType)]
-        
         if array_cols:
             print(f"[GOLD] Conversion des colonnes Array -> String : {array_cols}")
             for col_name in array_cols:
-                # On transforme ["a", "b"] en "a, b"
                 df = df.withColumn(col_name, concat_ws(", ", col(col_name)))
-        # ---------------------------------------------------------------------
+
+        # 2. OPTIMISATION CRITIQUE : REPARTITION
+        # On réduit le nombre de partitions à 8 pour éviter d'ouvrir 200 connexions MySQL
+        # et de saturer la mémoire RAM (Heap Space).
+        print(f"[GOLD] Optimisation : Reduction de {df.rdd.getNumPartitions()} partitions a 8 partitions.")
+        df = df.repartition(8)
 
         print("[GOLD] Demarrage chargement MySQL")
 
         mysql_conf = self.config['mysql']
         jdbc_url = mysql_conf['jdbc_url']
         
+        # On garde un batchsize raisonnable
         db_properties = {
             "user": mysql_conf['user'],
             "password": mysql_conf['password'],
             "driver": mysql_conf['driver'],
-            "batchsize": "5000",
+            "batchsize": "2000", # Réduit légèrement pour soulager la RAM (5000 -> 2000)
             "rewriteBatchedStatements": "true"
         }
 
