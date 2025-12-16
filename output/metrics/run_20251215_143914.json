@@ -1,0 +1,38 @@
+{
+  "run_timestamp": "2025-12-15T14:39:09.740321",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv",
+    "columns_count": 12,
+    "columns": [
+      "code",
+      "product_name",
+      "brands",
+      "categories",
+      "countries",
+      "last_modified_t",
+      "energy_kcal_100g",
+      "fat_100g",
+      "sugars_100g",
+      "proteins_100g",
+      "salt_100g",
+      "nutriscore_grade"
+    ]
+  },
+  "silver": {
+    "products_input": 25,
+    "products_filtered": 0,
+    "products_rejected": 25,
+    "rejection_rate_pct": 100.0,
+    "duplicates_removed": 0,
+    "avg_completeness": 0.0,
+    "completeness_pct": 0.0,
+    "anomalies": {
+      "total_products_with_anomalies": 0,
+      "anomaly_rate_pct": 0.0
+    }
+  },
+  "error": "Config MySQL invalide: mysql.jdbc_url / mysql.user manquants",
+  "duration_seconds": 4.59931
+}

@@ -1,0 +1,24 @@
+{
+  "run_timestamp": "2025-12-15T13:59:19.778771",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv"
+  },
+  "silver": {
+    "products_input": 25,
+    "products_filtered": 25,
+    "products_rejected": 0,
+    "rejection_rate_pct": 0.0,
+    "duplicates_removed": 0,
+    "avg_completeness": 0.368,
+    "completeness_pct": 36.8,
+    "anomalies": {
+      "total_products_with_anomalies": 0,
+      "anomaly_rate_pct": 0.0,
+      "by_rule": {}
+    }
+  },
+  "error": "Column product_code not found in schema Some(StructType(StructField(product_sk,LongType,false),StructField(code,StringType,false),StructField(product_name,StringType,true),StructField(brand_sk,LongType,true),StructField(effective_from,TimestampType,true),StructField(is_current,BooleanType,true))).",
+  "duration_seconds": 9.688969
+}

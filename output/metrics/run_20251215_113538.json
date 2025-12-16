@@ -1,0 +1,10 @@
+{
+  "run_timestamp": "2025-12-15T11:35:34.700837",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv"
+  },
+  "error": "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name `packaging` cannot be resolved. Did you mean one of the following? [`brands`, `code`, `fat_100g`, `salt_100g`, `categories`].;\n'Project [trim(code#0, None) AS code#173, coalesce(trim(product_name_fr#2, None), trim(product_name_en#3, None), trim(product_name#1, None)) AS product_name#174, trim(brands#4, None) AS brands#175, trim(categories#5, None) AS categories#176, trim(countries#6, None) AS countries#177, trim('packaging, None) AS packaging#178, trim('quantity, None) AS quantity#179, trim('serving_size, None) AS serving_size#180, last_modified_t#20, lower(trim(nutriscore_grade#17, None)) AS nutriscore_grade#181, nova_group#18, lower(trim(ecoscore_grade#19, None)) AS ecoscore_grade#182, 'nutriments]\n+- Relation [code#0,product_name#1,product_name_fr#2,product_name_en#3,brands#4,categories#5,countries#6,energy-kcal_100g#7,energy-kj_100g#8,fat_100g#9,saturated-fat_100g#10,carbohydrates_100g#11,sugars_100g#12,fiber_100g#13,proteins_100g#14,salt_100g#15,sodium_100g#16,nutriscore_grade#17,nova_group#18,ecoscore_grade#19,last_modified_t#20] csv\n",
+  "duration_seconds": 3.473696
+}

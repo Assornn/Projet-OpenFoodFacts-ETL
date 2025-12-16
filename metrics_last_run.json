@@ -1,17 +1,17 @@
 {
     "bronze": {
         "source_type": "csv",
-        "limit_applied": 1000
+        "limit_applied": "Aucune"
     },
     "silver": {
-        "products_input": 1000,
-        "products_filtered": 1000,
+        "products_input": 4170401,
+        "products_filtered": 4170401,
         "products_rejected": 0,
         "rejection_rate_pct": 0.0,
-        "duplicates_removed": 1,
-        "products_final": 999,
-        "avg_completeness": 0.5337,
-        "completeness_pct": 53.37,
-        "anomalies_count": 166
+        "duplicates_removed": 2592,
+        "products_final": 4167809,
+        "avg_completeness": 0.7328,
+        "completeness_pct": 73.28,
+        "anomalies_count": 15103
     }
 }

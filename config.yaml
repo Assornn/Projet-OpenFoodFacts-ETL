@@ -1,34 +1,70 @@
-# Configuration OpenFoodFacts ETL - CSV Officiel
+# ============================================================
+# MODÈLE DE CONFIGURATION (TEMPLATE)
+# Copiez ce fichier en 'config.local.yaml' et remplissez vos valeurs.
+# ============================================================
 
 spark:
   app_name: "OpenFoodFacts ETL"
   master: "local[*]"
   driver_memory: "4g"
   executor_memory: "4g"
-  mysql_jar: "/path/to/mysql-connector-java-8.0.33.jar"
+
+  # ⚠️ CHEMIN VERS LE DRIVER JDBC MYSQL
+  # Exemple Windows : "file:///C:/spark/jars/mysql-connector-j-9.5.0.jar"
+  # Exemple Linux/Mac : "/usr/local/spark/jars/mysql-connector-j-9.5.0.jar"
+  jars: "chemin/vers/votre/mysql-connector-j.jar"
+
+# ============================================================
+# MySQL - DataMart GOLD
+# ============================================================
 
 mysql:
   host: "localhost"
   port: 3306
   database: "openfoodfacts"
   user: "root"
-  password: "password"
-  jdbc_url: "jdbc:mysql://localhost:3306/openfoodfacts"
+  
+  # 🔒 MOT DE PASSE (À remplir uniquement dans config.local.yaml)
+  password: "CHANGE_ME"
+
+  # Paramètres de connexion (UTF-8 et Timezone sont importants pour Spark)
+  jdbc_url: "jdbc:mysql://localhost:3306/openfoodfacts?useUnicode=true&characterEncoding=utf8&serverTimezone=Europe/Paris&rewriteBatchedStatements=true"
+  driver: "com.mysql.cj.jdbc.Driver"
+
+# ============================================================
+# OpenFoodFacts - Source de données
+# ============================================================
 
 openfoodfacts:
-  # URL officielle du CSV OpenFoodFacts
+  # Source officielle
   source_url: "https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz"
-  
-  # Chemin local après téléchargement
-  raw_data_path: "data/raw/en.openfoodfacts.org.products.csv"
-  
+
+  # Chemin local du fichier (relatif à la racine du projet)
+  raw_data_path: "data/raw/en.openfoodfacts.org.products.csv.gz"
+
+  # Format du fichier source
   format: "csv"
+  delimiter: "\t"
+  header: true
+  encoding: "utf-8"
+
+# ============================================================
+# BRONZE - Paramètres d'extraction
+# ============================================================
+
+bronze:
+  # Limite de lignes pour le débuggage (commenter pour la prod)
+  # limit_rows: 1000
+
+# ============================================================
+# SILVER - Règles de Qualité
+# ============================================================
 
 quality:
   completeness:
     product_name: 0.95
     nutrients_key: 0.70
-  
+
   rules:
     bounds:
       sugars_100g: [0, 100]
@@ -37,12 +73,16 @@ quality:
       proteins_100g: [0, 100]
       energy_kcal_100g: [0, 900]
 
+# ============================================================
+# Pipeline ETL
+# ============================================================
+
 pipeline:
   phases:
     - bronze
     - silver
     - gold
-  
+
   execution:
     mode: "batch"
     checkpoint_enabled: true

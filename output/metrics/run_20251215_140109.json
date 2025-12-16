@@ -1,0 +1,24 @@
+{
+  "run_timestamp": "2025-12-15T14:00:58.923525",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv"
+  },
+  "silver": {
+    "products_input": 25,
+    "products_filtered": 25,
+    "products_rejected": 0,
+    "rejection_rate_pct": 0.0,
+    "duplicates_removed": 0,
+    "avg_completeness": 0.368,
+    "completeness_pct": 36.8,
+    "anomalies": {
+      "total_products_with_anomalies": 0,
+      "anomaly_rate_pct": 0.0,
+      "by_rule": {}
+    }
+  },
+  "error": "Column code not found in schema Some(StructType(StructField(fact_id,LongType,false),StructField(product_sk,LongType,true),StructField(time_sk,LongType,true),StructField(energy_kcal_100g,DecimalType(10,2),true),StructField(sugars_100g,DecimalType(10,2),true),StructField(salt_100g,DecimalType(10,2),true),StructField(nutriscore_grade,StringType,true),StructField(completeness_score,DecimalType(5,4),true))).",
+  "duration_seconds": 10.361305
+}

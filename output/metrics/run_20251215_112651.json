@@ -1,0 +1,6 @@
+{
+  "run_timestamp": "2025-12-15T11:26:50.366057",
+  "status": "failed",
+  "error": "[PATH_NOT_FOUND] Path does not exist: file:/C:/Users/abraure/Downloads/GIT/Projet-OpenFoodFacts-ETL/data/raw/openfoodfacts_sample.csv.",
+  "duration_seconds": 0.850526
+}

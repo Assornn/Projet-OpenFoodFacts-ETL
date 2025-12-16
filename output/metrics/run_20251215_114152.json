@@ -1,0 +1,10 @@
+{
+  "run_timestamp": "2025-12-15T11:41:49.270847",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv"
+  },
+  "error": "[NOT_COLUMN_OR_STR] Argument `col` should be a Column or str, got float.",
+  "duration_seconds": 3.242327
+}

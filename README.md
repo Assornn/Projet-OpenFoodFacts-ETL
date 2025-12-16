@@ -150,3 +150,22 @@ Si le hash est différent :
 UPDATE de l'ancienne ligne : set is_current=0, end_date=NOW().
 
 INSERT de la nouvelle ligne : set is_current=1, start_date=NOW(), end_date=NULL.
+
+
+COMMANDE A LANCER :
+
+Remove-Item .\etl.zip -Force                                                                                                                                   
+Compress-Archive -Path etl -DestinationPath etl.zip -Force
+C:\spark\bin\spark-submit.cmd `     
+>>    --master local[*] `
+>>    --conf spark.pyspark.python=C:\Users\abraure\AppData\Local\Programs\Python\Python310\python.exe `
+>>    --conf spark.pyspark.driver.python=C:\Users\abraure\AppData\Local\Programs\Python\Python310\python.exe `
+>>    --jars C:\spark\jars\mysql-connector-j-9.5.0.jar `
+>>    --driver-class-path C:\spark\jars\mysql-connector-j-9.5.0.jar `
+>>    --conf spark.executor.extraClassPath=C:\spark\jars\mysql-connector-j-9.5.0.jar `
+>>    --conf spark.driver.extraClassPath=C:\spark\jars\mysql-connector-j-9.5.0.jar `
+>>    --driver-memory 6g `
+>>    --executor-memory 6g `
+>>    --py-files etl.zip `
+>>    etl/main.py `
+>>    --config config.local.yaml

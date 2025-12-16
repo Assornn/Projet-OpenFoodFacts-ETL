@@ -1,0 +1,24 @@
+{
+  "run_timestamp": "2025-12-15T13:46:15.928257",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv"
+  },
+  "silver": {
+    "products_input": 25,
+    "products_filtered": 25,
+    "products_rejected": 0,
+    "rejection_rate_pct": 0.0,
+    "duplicates_removed": 0,
+    "avg_completeness": 0.368,
+    "completeness_pct": 36.8,
+    "anomalies": {
+      "total_products_with_anomalies": 0,
+      "anomaly_rate_pct": 0.0,
+      "by_rule": {}
+    }
+  },
+  "error": "Column day not found in schema Some(StructType(StructField(time_sk,LongType,false),StructField(date,DateType,false),StructField(year,IntegerType,false),StructField(month,IntegerType,false),StructField(week,IntegerType,false))).",
+  "duration_seconds": 8.522905
+}

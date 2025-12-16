@@ -1,0 +1,38 @@
+{
+  "run_timestamp": "2025-12-15T14:48:07.841910",
+  "status": "failed",
+  "bronze": {
+    "products_read": 25,
+    "source_path": "data/raw/openfoodfacts_sample.csv",
+    "columns_count": 12,
+    "columns": [
+      "code",
+      "product_name",
+      "brands",
+      "categories",
+      "countries",
+      "last_modified_t",
+      "energy_kcal_100g",
+      "fat_100g",
+      "sugars_100g",
+      "proteins_100g",
+      "salt_100g",
+      "nutriscore_grade"
+    ]
+  },
+  "silver": {
+    "products_input": 25,
+    "products_filtered": 0,
+    "products_rejected": 25,
+    "rejection_rate_pct": 100.0,
+    "duplicates_removed": 0,
+    "avg_completeness": 0.0,
+    "completeness_pct": 0.0,
+    "anomalies": {
+      "total_products_with_anomalies": 0,
+      "anomaly_rate_pct": 0.0
+    }
+  },
+  "error": "[UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or function parameter with name `tgt`.`product_hash` cannot be resolved. Did you mean one of the following? [`src`.`product_hash`, `tgt`.`product_name`, `tgt`.`product_sk`, `src`.`product_name`, `tgt`.`code`].;\n'Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, completeness_score#1433, quality_issues#1462, product_hash#3610, product_sk#3626L, product_name#3628, brand_sk#3629L, effective_from#3630, effective_to#3631, is_current#3632]\n+- 'Filter (isnotnull(code#3627) AND NOT (product_hash#3610 = 'tgt.product_hash))\n   +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, completeness_score#1433, quality_issues#1462, product_hash#3610, product_sk#3626L, product_name#3628, brand_sk#3629L, effective_from#3630, effective_to#3631, is_current#3632, code#3627]\n      +- Join LeftOuter, (code#101 = code#3627)\n         :- SubqueryAlias src\n         :  +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, completeness_score#1433, quality_issues#1462, sha2(cast(concat_ws(||, product_name#102, brands#103, categories#104, countries#105, nutriscore_grade#107) as binary), 256) AS product_hash#3610]\n         :     +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, completeness_score#1433, quality_issues#1462, sha2(cast(concat_ws(||, product_name#102, brands#103, categories#104, countries#105, nutriscore_grade#107) as binary), 256) AS product_hash#1478]\n         :        +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, completeness_score#1433, filter(quality_issues#1447, lambdafunction(isnotnull(lambda x#1463), lambda x#1463, false)) AS quality_issues#1462]\n         :           +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, completeness_score#1433, array(CASE WHEN (energy_kcal_100g#108 > cast(900 as double)) THEN energy_out_of_bounds END, CASE WHEN (energy_kcal_100g#108 < cast(0 as double)) THEN negative_energy END, CASE WHEN (sugars_100g#110 > cast(100 as double)) THEN sugars_out_of_bounds END, CASE WHEN (sugars_100g#110 < cast(0 as double)) THEN negative_sugars END, CASE WHEN (fat_100g#109 > cast(100 as double)) THEN fat_out_of_bounds END, CASE WHEN (proteins_100g#111 > cast(100 as double)) THEN proteins_out_of_bounds END, CASE WHEN (salt_100g#112 > cast(25 as double)) THEN salt_out_of_bounds END, CASE WHEN (salt_100g#112 < cast(0 as double)) THEN negative_salt END) AS quality_issues#1447]\n         :              +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, (cast(((((CASE WHEN isnotnull(product_name#102) THEN 1 ELSE 0 END + CASE WHEN isnotnull(brands#103) THEN 1 ELSE 0 END) + CASE WHEN isnotnull(energy_kcal_100g#108) THEN 1 ELSE 0 END) + CASE WHEN isnotnull(fat_100g#109) THEN 1 ELSE 0 END) + CASE WHEN isnotnull(sugars_100g#110) THEN 1 ELSE 0 END) as double) / cast(5.0 as double)) AS completeness_score#1433]\n         :                 +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112]\n         :                    +- Filter (rn#1090 = 1)\n         :                       +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, rn#1090]\n         :                          +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112, rn#1090, rn#1090]\n         :                             +- Window [row_number() windowspecdefinition(code#101, last_modified_ts#106 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#1090], [code#101], [last_modified_ts#106 DESC NULLS LAST]\n         :                                +- Project [code#101, product_name#102, brands#103, categories#104, countries#105, last_modified_ts#106, nutriscore_grade#107, energy_kcal_100g#108, fat_100g#109, sugars_100g#110, proteins_100g#111, salt_100g#112]\n         :                                   +- Filter ((isnotnull(code#101) AND (length(code#101) >= 8)) AND RLIKE(code#101, ^[0-9]+$))\n         :                                      +- Project [trim(code#0, None) AS code#101, trim(product_name#1, None) AS product_name#102, trim(brands#2, None) AS brands#103, trim(categories#3, None) AS categories#104, trim(countries#4, None) AS countries#105, to_timestamp(last_modified_t#5, None, TimestampType, Some(Europe/Paris), false) AS last_modified_ts#106, lower(trim(nutriscore_grade#11, None)) AS nutriscore_grade#107, cast(energy_kcal_100g#6 as double) AS energy_kcal_100g#108, cast(fat_100g#7 as double) AS fat_100g#109, cast(sugars_100g#8 as double) AS sugars_100g#110, cast(proteins_100g#9 as double) AS proteins_100g#111, cast(salt_100g#10 as double) AS salt_100g#112]\n         :                                         +- Relation [code#0,product_name#1,brands#2,categories#3,countries#4,last_modified_t#5,energy_kcal_100g#6,fat_100g#7,sugars_100g#8,proteins_100g#9,salt_100g#10,nutriscore_grade#11] csv\n         +- SubqueryAlias tgt\n            +- Filter is_current#3632: boolean\n               +- Relation [product_sk#3626L,code#3627,product_name#3628,brand_sk#3629L,effective_from#3630,effective_to#3631,is_current#3632] JDBCRelation(dim_product) [numPartitions=1]\n",
+  "duration_seconds": 6.058599
+}
