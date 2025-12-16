@@ -7,7 +7,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import (
     col, trim, lower, when, lit, length, row_number,
     desc, avg, array, expr, size, regexp_replace,
-    sha2, concat_ws, from_unixtime, to_timestamp, coalesce, array_union
+    sha2, concat_ws, from_unixtime, to_timestamp, coalesce, array_union, broadcast
 )
 from pyspark.sql.types import DoubleType
 from pyspark.sql.window import Window
@@ -31,34 +31,27 @@ class SilverTransformer:
         logger.info("=== PHASE SILVER: Nettoyage et normalisation ===")
 
         # BONUS MULTILINGUE : Résolution intelligente du nom
-        # On vérifie si les colonnes _fr existent, sinon on fallback sur product_name
         name_col = col("product_name")
         if "product_name_fr" in df.columns and "product_name_en" in df.columns:
             name_col = coalesce(col("product_name_fr"), col("product_name_en"), col("product_name"))
         
         df = (
             df.select(
-                # Textes : Trim + Lower
                 trim(col("code")).alias("code"),
-                
-                # Bonus Multilingue appliqué ici
                 trim(name_col).alias("product_name"),
-                
                 lower(trim(col("brands"))).alias("brands"),
                 lower(trim(col("categories"))).alias("categories"),
-                lower(trim(col("countries"))).alias("countries"),
+                
+                # On garde le code pays original pour la jointure
+                lower(trim(col("countries"))).alias("countries_raw"),
 
-                # Timestamp : Gestion duale via expressions SQL
                 coalesce(
-                    # Cas 1 : Format Unix (chiffres)
                     to_timestamp(from_unixtime(expr("try_cast(last_modified_t AS BIGINT)"))),
-                    # Cas 2 : Format ISO String
                     expr("try_cast(last_modified_t AS TIMESTAMP)")
                 ).alias("last_modified_ts"),
 
                 lower(trim(col("nutriscore_grade"))).alias("nutriscore_grade"),
 
-                # Numeriques : Utilisation de SQL expr pour try_cast
                 expr("try_cast(replace(`energy-kcal_100g`, ',', '.') AS DOUBLE)").alias("energy_kcal_100g"),
                 expr("try_cast(replace(fat_100g, ',', '.') AS DOUBLE)").alias("fat_100g"),
                 expr("try_cast(replace(sugars_100g, ',', '.') AS DOUBLE)").alias("sugars_100g"),
@@ -68,6 +61,41 @@ class SilverTransformer:
         )
 
         logger.info("OK Nettoyage et normalisation effectues")
+        return df
+
+    # ==================================================
+    # ENRICHISSEMENT (BROADCAST JOIN) - EXIGENCE TP
+    # ==================================================
+    def enrich_with_referential(self, df: DataFrame) -> DataFrame:
+        """
+        Enrichit les données avec un référentiel via Broadcast Join.
+        Normalise les noms de pays.
+        """
+        logger.info("Enrichissement avec referentiel (Broadcast Join)...")
+
+        # Création d'un petit référentiel (Simulation taxonomie)
+        countries_data = [
+            ("en:france", "France"),
+            ("fr:france", "France"),
+            ("france", "France"),
+            ("en:united-states", "United States"),
+            ("us", "United States"),
+            ("usa", "United States"),
+            ("en:united-kingdom", "United Kingdom"),
+            ("uk", "United Kingdom"),
+            ("en:spain", "Spain"),
+            ("es", "Spain")
+        ]
+        # Dans un vrai cas, on chargerait un CSV ici
+        ref_df = self.spark.createDataFrame(countries_data, ["country_code", "country_label"])
+
+        # Jointure Broadcast : Très rapide car ref_df est petit
+        df = df.join(broadcast(ref_df), df.countries_raw == ref_df.country_code, "left")
+        
+        # Si on trouve le pays dans le ref, on le prend, sinon on garde l'original
+        df = df.withColumn("countries", coalesce(col("country_label"), col("countries_raw"))) \
+               .drop("country_code", "country_label", "countries_raw")
+
         return df
 
     # ==================================================
@@ -154,16 +182,9 @@ class SilverTransformer:
     # BONUS : ANOMALIES STATISTIQUES (IQR)
     # ==================================================
     def detect_outliers_iqr(self, df: DataFrame) -> DataFrame:
-        """
-        Détecte les valeurs aberrantes statistiquement (Interquartile Range).
-        Ajoute ces anomalies dans la liste 'quality_issues' existante.
-        """
         logger.info("Detection des anomalies statistiques (IQR)...")
-        
-        # Liste des colonnes numériques à vérifier
         numeric_cols = ["energy_kcal_100g", "fat_100g", "sugars_100g", "salt_100g", "proteins_100g"]
         
-        # Sécurité : Si DF vide, on return direct
         try:
             if df.rdd.isEmpty(): return df
         except:
@@ -173,23 +194,16 @@ class SilverTransformer:
         
         for col_name in numeric_cols:
             try:
-                # Calcul Q1 (25%) et Q3 (75%) avec une erreur relative de 5% (pour la perf)
                 quantiles = df.approxQuantile(col_name, [0.25, 0.75], 0.05)
                 q1, q3 = quantiles[0], quantiles[1]
-                
-                # Calcul IQR et bornes
                 iqr = q3 - q1
-                # On ne vérifie que la borne haute (Upper Fence) pour les nutriments
                 upper_bound = q3 + 1.5 * iqr
                 
-                # Si l'écart est nul (toutes les valeurs sont identiques), on ignore
                 if iqr == 0: continue
 
-                # Ajout de la règle SQL
                 bounds_sql_parts.append(
                     f"CASE WHEN {col_name} > {upper_bound} THEN '{col_name}_stat_high' END"
                 )
-                logger.info(f"IQR {col_name}: Seuil Statistique = {upper_bound:.2f}")
                 
             except Exception as e:
                 logger.warning(f"Skip IQR pour {col_name}: {e}")
@@ -197,10 +211,8 @@ class SilverTransformer:
         if not bounds_sql_parts:
             return df
 
-        # Création d'un tableau temporaire d'anomalies IQR
         iqr_expr = "filter(array(" + ", ".join(bounds_sql_parts) + "), x -> x IS NOT NULL)"
         
-        # Fusion intelligente avec le tableau existant
         return df.withColumn("iqr_issues", expr(iqr_expr)) \
                  .withColumn("quality_issues", array_union(col("quality_issues"), col("iqr_issues"))) \
                  .drop("iqr_issues")
@@ -233,16 +245,16 @@ class SilverTransformer:
         logger.info("=== DEMARRAGE PHASE SILVER ===")
 
         df = self.clean_and_normalize(df_bronze)
+        
+        # --- AJOUT DU BROADCAST JOIN ---
+        df = self.enrich_with_referential(df)
+        # -------------------------------
+
         df = self.filter_invalid_records(df)
         df = self.deduplicate(df)
         df = self.calculate_completeness(df)
-        
-        # Détection anomalies métier
         df = self.detect_anomalies(df)
-        
-        # Détection anomalies statistiques (BONUS)
         df = self.detect_outliers_iqr(df)
-        
         df = self.compute_product_hash(df)
 
         df.cache()
@@ -251,7 +263,6 @@ class SilverTransformer:
         row_avg = df.agg(avg("completeness_score")).first()
         avg_comp = row_avg[0] if row_avg and row_avg[0] else 0.0
         
-        # On compte les lignes où quality_issues n'est pas vide
         anomalies = df.filter(size(col("quality_issues")) > 0).count()
 
         self.metrics.update({
