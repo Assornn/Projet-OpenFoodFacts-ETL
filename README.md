@@ -29,7 +29,7 @@ graph LR
     E -->|SQL| F[(DataMart MySQL)]
     F -->|Connector| G[Dashboard Streamlit]
 
-    🛠️ Stack Technologique
+🛠️ Stack Technologique
 ETL Engine : Apache Spark 3.5 (PySpark)
 
 Storage : MySQL 8.0 (InnoDB)
