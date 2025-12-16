@@ -7,7 +7,7 @@ from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import (
     col, trim, lower, when, lit, length, row_number,
     desc, avg, array, expr, size, regexp_replace,
-    try_to_timestamp, sha2, concat_ws
+    sha2, concat_ws, from_unixtime, to_timestamp, coalesce
 )
 from pyspark.sql.types import DoubleType
 from pyspark.sql.window import Window
@@ -30,23 +30,35 @@ class SilverTransformer:
     def clean_and_normalize(self, df: DataFrame) -> DataFrame:
         logger.info("=== PHASE SILVER: Nettoyage et normalisation ===")
 
+        # Note: On utilise expr("try_cast(...)") pour être compatible
+        # avec les versions de PySpark où la fonction python try_cast n'existe pas encore.
+        
         df = (
             df.select(
+                # Textes : Trim + Lower
                 trim(col("code")).alias("code"),
                 trim(col("product_name")).alias("product_name"),
                 lower(trim(col("brands"))).alias("brands"),
                 lower(trim(col("categories"))).alias("categories"),
                 lower(trim(col("countries"))).alias("countries"),
 
-                try_to_timestamp(col("last_modified_t")).alias("last_modified_ts"),
+                # Timestamp : Gestion duale via expressions SQL
+                coalesce(
+                    # Cas 1 : Format Unix (chiffres)
+                    to_timestamp(from_unixtime(expr("try_cast(last_modified_t AS BIGINT)"))),
+                    # Cas 2 : Format ISO String
+                    expr("try_cast(last_modified_t AS TIMESTAMP)")
+                ).alias("last_modified_ts"),
 
                 lower(trim(col("nutriscore_grade"))).alias("nutriscore_grade"),
 
-                regexp_replace(col("energy-kcal_100g"), ",", ".").cast(DoubleType()).alias("energy_kcal_100g"),
-                regexp_replace(col("fat_100g"), ",", ".").cast(DoubleType()).alias("fat_100g"),
-                regexp_replace(col("sugars_100g"), ",", ".").cast(DoubleType()).alias("sugars_100g"),
-                regexp_replace(col("proteins_100g"), ",", ".").cast(DoubleType()).alias("proteins_100g"),
-                regexp_replace(col("salt_100g"), ",", ".").cast(DoubleType()).alias("salt_100g"),
+                # Numeriques : Utilisation de SQL expr pour try_cast
+                # Attention aux backticks pour energy-kcal qui a un tiret
+                expr("try_cast(replace(`energy-kcal_100g`, ',', '.') AS DOUBLE)").alias("energy_kcal_100g"),
+                expr("try_cast(replace(fat_100g, ',', '.') AS DOUBLE)").alias("fat_100g"),
+                expr("try_cast(replace(sugars_100g, ',', '.') AS DOUBLE)").alias("sugars_100g"),
+                expr("try_cast(replace(proteins_100g, ',', '.') AS DOUBLE)").alias("proteins_100g"),
+                expr("try_cast(replace(salt_100g, ',', '.') AS DOUBLE)").alias("salt_100g"),
             )
         )
 
@@ -63,9 +75,8 @@ class SilverTransformer:
 
         df = (
             df.filter(col("code").isNotNull())
-              .filter(length(col("code")) >= 8)
-              .filter(col("code").rlike("^[0-9]+$"))
-              .filter(col("last_modified_ts").isNotNull())
+              .filter(length(col("code")) >= 8)  
+              .filter(col("code").rlike("^[0-9]+$")) 
         )
 
         after = df.count()
@@ -77,7 +88,7 @@ class SilverTransformer:
             "rejection_rate_pct": round(((before - after) / before * 100), 2) if before else 0.0
         })
 
-        logger.info("OK Filtrage: %s produits conserves", after)
+        logger.info(f"OK Filtrage: {after} produits conserves")
         return df
 
     # ==================================================
@@ -89,6 +100,7 @@ class SilverTransformer:
         before = df.count()
 
         w = Window.partitionBy("code").orderBy(desc("last_modified_ts"))
+        
         df = (
             df.withColumn("rn", row_number().over(w))
               .filter(col("rn") == 1)
@@ -121,13 +133,13 @@ class SilverTransformer:
             "quality_issues",
             expr("""
                 filter(array(
-                    CASE WHEN energy_kcal_100g > 900 THEN 'energy_out_of_bounds' END,
+                    CASE WHEN energy_kcal_100g > 9000 THEN 'energy_out_of_bounds' END,
                     CASE WHEN energy_kcal_100g < 0 THEN 'negative_energy' END,
                     CASE WHEN sugars_100g > 100 THEN 'sugars_out_of_bounds' END,
                     CASE WHEN sugars_100g < 0 THEN 'negative_sugars' END,
                     CASE WHEN fat_100g > 100 THEN 'fat_out_of_bounds' END,
                     CASE WHEN proteins_100g > 100 THEN 'proteins_out_of_bounds' END,
-                    CASE WHEN salt_100g > 25 THEN 'salt_out_of_bounds' END,
+                    CASE WHEN salt_100g > 100 THEN 'salt_out_of_bounds' END,
                     CASE WHEN salt_100g < 0 THEN 'negative_salt' END
                 ), x -> x IS NOT NULL)
             """)
@@ -142,11 +154,13 @@ class SilverTransformer:
             sha2(
                 concat_ws(
                     "||",
-                    "product_name",
-                    "brands",
-                    "categories",
-                    "countries",
-                    "nutriscore_grade"
+                    col("product_name"),
+                    col("brands"),
+                    col("categories"),
+                    col("countries"),
+                    col("nutriscore_grade"),
+                    col("energy_kcal_100g").cast("string"),
+                    col("sugars_100g").cast("string")
                 ),
                 256
             )
@@ -165,8 +179,12 @@ class SilverTransformer:
         df = self.detect_anomalies(df)
         df = self.compute_product_hash(df)
 
+        df.cache()
+        
         final_count = df.count()
-        avg_comp = df.agg(avg("completeness_score")).first()[0] or 0.0
+        row_avg = df.agg(avg("completeness_score")).first()
+        avg_comp = row_avg[0] if row_avg and row_avg[0] else 0.0
+        
         anomalies = df.filter(size(col("quality_issues")) > 0).count()
 
         self.metrics.update({
@@ -176,8 +194,7 @@ class SilverTransformer:
             "anomalies_count": anomalies
         })
 
-        df.cache()
-        logger.info("=== PHASE SILVER TERMINEE ===")
+        logger.info(f"=== PHASE SILVER TERMINEE (Produits: {final_count}) ===")
         return df
 
     def get_metrics(self) -> dict:

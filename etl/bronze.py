@@ -1,129 +1,85 @@
-"""
-PHASE BRONZE - Extraction des données OpenFoodFacts (CSV)
-Conforme TRDE703 - Spark ETL
-"""
-
-import logging
-from pathlib import Path
-
-from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.functions import col
-
-logger = logging.getLogger(__name__)
-
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, current_timestamp
 
 class BronzeExtractor:
-    """
-    Extracteur Bronze
-    - Lecture CSV OpenFoodFacts (header réel)
-    - Colonnes RAW en STRING
-    - Aucune transformation métier
-    """
-
     def __init__(self, spark: SparkSession, config: dict):
         self.spark = spark
         self.config = config
-        self.metrics = {}
+        self.limit_applied = None # Pour les métriques
 
-        # Limite optionnelle (tests locaux)
-        self.limit_rows = (
-            config.get("bronze", {})
-                  .get("limit_rows")
-        )
+    def extract(self):
+        """
+        Point d'entrée principal de l'extraction Bronze.
+        """
+        print("=== PHASE BRONZE: Extraction OpenFoodFacts ===")
+        
+        # Récupération du chemin du fichier raw depuis la config
+        raw_path = self.config['openfoodfacts']['raw_data_path']
+        print(f"Source: {raw_path}")
 
-    # ==================================================
-    # EXTRACTION CSV OPENFOODFACTS
-    # ==================================================
-    def extract_csv(self, source_path: str) -> DataFrame:
-        logger.info("=== PHASE BRONZE: Extraction OpenFoodFacts ===")
-        logger.info(f"Source: {source_path}")
+        return self.extract_csv(raw_path)
 
-        if not Path(source_path).exists():
-            raise FileNotFoundError(f"Fichier introuvable: {source_path}")
+    def extract_csv(self, source_path):
+        """
+        Lit le fichier CSV (TSV compressé) et sélectionne les colonnes pertinentes.
+        Gère le Schema Drift (changement de nom de colonnes).
+        """
+        
+        # 1. Lecture brute du CSV avec les paramètres de la config
+        df_raw = self.spark.read.format("csv") \
+            .option("header", "true") \
+            .option("delimiter", "\t") \
+            .option("inferSchema", "false") \
+            .load(source_path)
 
+        # 2. Sélection et Cast des colonnes
         try:
-            # --------------------------------------------------
-            # LECTURE CSV ROBUSTE (HEADER RÉEL)
-            # --------------------------------------------------
-            df_raw = (
-                self.spark.read
-                .option("header", "true")
-                .option("sep", ",")              # CSV OpenFoodFacts
-                .option("quote", '"')
-                .option("escape", '"')
-                .option("multiLine", "true")
-                .option("mode", "PERMISSIVE")
-                .csv(source_path)
-            )
-
-            initial_count = df_raw.count()
-
-            # --------------------------------------------------
-            # SÉLECTION DES COLONNES UTILES (RAW)
-            # --------------------------------------------------
             df = df_raw.select(
                 col("code").cast("string"),
                 col("product_name").cast("string"),
                 col("brands").cast("string"),
                 col("categories").cast("string"),
                 col("countries").cast("string"),
-
-                col("energy-kcal_100g").cast("string"),
-                col("fat_100g").cast("string"),
-                col("sugars_100g").cast("string"),
-                col("proteins_100g").cast("string"),
-                col("salt_100g").cast("string"),
-
+                
+                # Nutriments
+                col("energy-kcal_100g").cast("float"),
+                col("fat_100g").cast("float"),
+                col("sugars_100g").cast("float"),
+                col("proteins_100g").cast("float"),
+                col("salt_100g").cast("float"),
+                
                 col("nutriscore_grade").cast("string"),
-                col("completeness_score").cast("string"),
-                col("last_modified_t").cast("string"),
+                
+                # Correction Schema Drift
+                col("completeness").alias("completeness_score").cast("float"),
+
+                col("last_modified_t").cast("long")
             )
 
-            # --------------------------------------------------
-            # LIMITE OPTIONNELLE
-            # --------------------------------------------------
-            if self.limit_rows:
-                logger.warning(
-                    "[BRONZE] Limitation activée: %s lignes",
-                    self.limit_rows
-                )
-                df = df.limit(int(self.limit_rows))
+            # Ajout de métadonnées
+            df = df.withColumn("ingestion_date", current_timestamp())
 
-            final_count = df.count()
+            # 3. Gestion sécurisée de la limite
+            bronze_conf = self.config.get('bronze') or {}
+            limit_rows = bronze_conf.get('limit_rows')
 
-            # --------------------------------------------------
-            # MÉTRIQUES
-            # --------------------------------------------------
-            self.metrics = {
-                "products_read_raw": initial_count,
-                "products_read": final_count,
-                "limit_rows": self.limit_rows,
-                "source_path": source_path,
-                "columns_count": len(df.columns),
-                "columns": df.columns,
-            }
+            if limit_rows:
+                print(f"[INFO] LIMIT APPLIQUEE: {limit_rows} lignes")
+                df = df.limit(limit_rows)
+                self.limit_applied = limit_rows
 
-            logger.info(f"✓ Produits extraits: {final_count}")
-            logger.info(f"Colonnes lues: {len(df.columns)}")
-
-            df.cache()
             return df
 
         except Exception as e:
-            logger.exception("✗ Erreur extraction Bronze")
+            print(f"[ERREUR] Erreur lors de la selection des colonnes dans Bronze : {e}")
             raise e
 
-    # ==================================================
-    # POINT D’ENTRÉE
-    # ==================================================
-    def extract(self, source_path: str = None) -> DataFrame:
-        if source_path is None:
-            source_path = self.config["openfoodfacts"]["raw_data_path"]
-
-        return self.extract_csv(source_path)
-
-    # ==================================================
-    # MÉTRIQUES
-    # ==================================================
-    def get_metrics(self) -> dict:
-        return self.metrics
+    def get_metrics(self):
+        """
+        Retourne les métriques de l'extraction pour le rapport final.
+        C'est cette fonction qui manquait !
+        """
+        return {
+            "source_type": "csv",
+            "limit_applied": self.limit_applied if self.limit_applied else "Aucune"
+        }
